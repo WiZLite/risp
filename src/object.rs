@@ -4,7 +4,9 @@ use std::fmt;
 pub enum Object {
     Void,
     Integer(i64),
+    Float(f64),
     Bool(bool),
+    String(String),
     Symbol(String),
     Lambda(Vec<String>, Vec<Object>),
     List(Vec<Object>),
@@ -15,7 +17,9 @@ impl fmt::Display for Object {
         match self {
             Object::Void => write!(f, "Void"),
             Object::Integer(n) => write!(f, "{}", n),
+            Object::Float(f_) => write!(f, "{}", f_),
             Object::Bool(b) => write!(f, "{}", b),
+            Object::String(s) => write!(f, "{}", s),
             Object::Symbol(s) => write!(f, "{}", s),
             Object::Lambda(params, body) => {
                 write!(f, "Lambda(")?;

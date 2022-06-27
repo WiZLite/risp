@@ -1,24 +1,26 @@
-use std::{rc::Rc, cell::{RefCell, Ref}};
+use std::{rc::Rc, cell::{RefCell}, cmp::Ordering};
 
 use crate::{object::Object, env::Env, parser::parse};
 
 fn eval_obj(obj: &Object, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
     match obj {
-        Object::Void => Ok(Object::Void),
-        Object::Lambda(_params, _body) => Ok(Object::Void),
-        Object::Bool(_) => Ok(obj.clone()),
-        Object::Integer(n) => Ok(Object::Integer(*n)),
         Object::Symbol(s) => eval_symbol(s, env),
-        Object::List(list) => eval_list(list, env)
+        Object::List(list) => eval_list(list, env),
+        _ => Ok(obj.clone())
     }
 }
 
 fn eval_symbol(s: &str, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
-    let val = env.borrow_mut().get(s);
+    let val = match s {
+        "true" => return Ok(Object::Bool(true)),
+        "false" => return Ok(Object::Bool(false)),
+        "nil" => return Ok(Object::Void),
+        _ => env.borrow_mut().get(s)
+    };
     if val.is_none() {
         return Err(format!("Unbound symbol: {}", s));
     } else {
-        Ok(val.unwrap().clone())
+        Ok(val.unwrap())
     }
 }
 
@@ -69,26 +71,91 @@ fn eval_define(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object,
 
 fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
     let operator = list[0].clone();
-    let left = eval_obj(&list[1].clone(), env)?;
-    let right = eval_obj(&list[2].clone(), env)?;
-    let left_val = match left {
-        Object::Integer(n) => n,
-        _ => return Err(format!("Left operand must be an integer {:?}", left))
-    };
-    let right_val = match right {
-        Object::Integer(n) => n,
-        _ => return Err(format!("Right operand must be an integer {:?}", right))
-    };
+    let left = &eval_obj(&list[1].clone(), env)?;
+    let right = &eval_obj(&list[2].clone(), env)?;
     match operator {
         Object::Symbol(s) => match s.as_str() {
-            "+" => Ok(Object::Integer(left_val + right_val)),
-            "-" => Ok(Object::Integer(left_val - right_val)),
-            "*" => Ok(Object::Integer(left_val * right_val)),
-            "/" => Ok(Object::Integer(left_val / right_val)),
-            "<" => Ok(Object::Bool(left_val < right_val)),
-            ">" => Ok(Object::Bool(left_val > right_val)),
-            "=" => Ok(Object::Bool(left_val == right_val)),
-            "!=" => Ok(Object::Bool(left_val != right_val)),
+            "+" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l + r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 + r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Float(l + r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Float(l + *r as f64)),
+                (Object::String(l), Object::String(r)) => Ok(Object::String(l.to_owned() + r)),
+                _ => {
+                    Err(format!("Invalid types for + operator {} {}", left, right))
+                }
+            },
+            "-" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l - r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Float(l - r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 - r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Float(l - *r as f64)),
+                _ => Err(format!("Invalid types for - operator {} {}", left, right)),
+            },
+            "*" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l * r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Float(l * r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 * r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Float(l * (*r) as f64)),
+                _ => Err(format!("Invalid types for * operator {} {}", left, right)),
+            },
+            "/" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l / r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Float(l / r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 / r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Float(l / (*r) as f64)),
+                _ => Err(format!("Invalid types for / operator {} {}", left, right)),
+            },
+            "%" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l % r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Float(l % r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 % r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Float(l % (*r) as f64)),
+                _ => Err(format!("Invalid types for % operator {} {}", left, right)),
+            },
+            "<" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Bool(l < r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Bool(l < r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Bool((*l as f64) < *r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Bool(l < &(*r as f64))),
+                (Object::String(l), Object::String(r)) => {
+                    Ok(Object::Bool(l.cmp(&r) == Ordering::Less))
+                }
+                _ => Err(format!("Invalid types for < operator {} {}", left, right)),
+            },
+            ">" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Bool(l > r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Bool(l > r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Bool(*l as f64 > *r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Bool(l > &(*r as f64))),
+                (Object::String(l), Object::String(r)) => {
+                    Ok(Object::Bool(l.cmp(&r) == Ordering::Greater))
+                }
+                _ => Err(format!("Invalid types for > operator {} {}", left, right)),
+            },
+            "=" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Bool(l == r)),
+                (Object::String(l), Object::String(r)) => Ok(Object::Bool(l == r)),
+                _ => Err(format!("Invalid types for == operator {} {}", left, right)),
+            },
+            "!=" => match (left, right) {
+                (Object::Integer(l), Object::Integer(r)) => Ok(Object::Bool(l != r)),
+                (Object::Float(l), Object::Float(r)) => Ok(Object::Bool(l != r)),
+                (Object::Integer(l), Object::Float(r)) => Ok(Object::Bool(*l as f64 != *r)),
+                (Object::Float(l), Object::Integer(r)) => Ok(Object::Bool(*l != (*r) as f64)),
+                (Object::String(l), Object::String(r)) => {
+                    Ok(Object::Bool(l.cmp(&r) != Ordering::Equal))
+                }
+                _ => Err(format!("Invalid types for != operator {} {}", left, right)),
+            },
+            "&" => match (left, right) {
+                (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(*l && *r)),
+                _ => Err(format!("Invalid types for & operator {} {}", left, right)),
+            },
+            "|" => match (left, right) {
+                (Object::Bool(l), Object::Bool(r)) => Ok(Object::Bool(*l || *r)),
+                _ => Err(format!("Invalid types for | operator {} {}", left, right)),
+            },
             _ => Err(format!("Invalid infix operator: {}", s))
         },
         _ => Err(format!("Operator must be a symbol")),
