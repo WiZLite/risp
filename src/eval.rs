@@ -31,6 +31,7 @@ fn eval_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, S
             "define" => eval_define(&list, env),
             "+" | "-" | "*" | "/" | "<" | ">" | "=" | "!=" | "&" | "|" => eval_binary_op(&list, env),
             "if" => eval_if(&list, env),
+            "list" => eval_list_data(&list, env),
             "lambda" => eval_function_definition(&list),
             _ => eval_function_call(s, &list, env)
         },
@@ -67,6 +68,14 @@ fn eval_define(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object,
     let val = eval_obj(&list[2], env)?;
     env.borrow_mut().set(&sym, val);
     Ok(Object::Void)
+}
+
+fn eval_list_data(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    let mut elms = Vec::new();
+    for obj in list[1..].iter() {
+        elms.push(eval_obj(obj, env)?);
+    }
+    Ok(Object::ListData(elms))
 }
 
 fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {

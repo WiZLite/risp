@@ -10,6 +10,7 @@ pub enum Object {
     Symbol(String),
     Lambda(Vec<String>, Vec<Object>),
     List(Vec<Object>),
+    ListData(Vec<Object>),
 }
 
 impl fmt::Display for Object {
@@ -33,6 +34,16 @@ impl fmt::Display for Object {
                 Ok(())
             }
             Object::List(list) => {
+                write!(f, "(")?;
+                for (i, obj) in list.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}", obj)?;
+                }
+                write!(f, ")")
+            }
+            Object::ListData(list) => {
                 write!(f, "(")?;
                 for (i, obj) in list.iter().enumerate() {
                     if i > 0 {
