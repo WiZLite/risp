@@ -31,7 +31,6 @@ impl Env {
         }
     }
 
-
     pub fn set(&mut self, name: &str, val: Object) {
         self.vars.insert(name.to_string(), val);
     }

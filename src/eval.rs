@@ -1,4 +1,6 @@
-use std::{rc::Rc, cell::{RefCell}, cmp::Ordering};
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::rc::Rc;
 
 use crate::{object::Object, env::Env, parser::parse};
 
@@ -32,6 +34,8 @@ fn eval_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, S
             "+" | "-" | "*" | "/" | "<" | ">" | "=" | "!=" | "&" | "|" => eval_binary_op(&list, env),
             "if" => eval_if(&list, env),
             "list" => eval_list_data(&list, env),
+            "map" => eval_map(&list, env),
+            "filter" => eval_filter(&list, env),
             "lambda" => eval_function_definition(&list),
             _ => eval_function_call(s, &list, env)
         },
@@ -76,6 +80,80 @@ fn eval_list_data(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Obje
         elms.push(eval_obj(obj, env)?);
     }
     Ok(Object::ListData(elms))
+}
+
+fn eval_map(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    if list.len() != 3 {
+        return Err(format!("Invalid arity for map function. map accepts only two args."));
+    }
+    let lambda = eval_obj(&list[1], env)?;
+    let coll = eval_obj(&list[2], env)?;
+    let (params, body) = match lambda {
+        Object::Lambda(p, b) => {
+            if p.len() != 1 {
+                return Err(format!("Invalid number of parameters for map lambda function {:?}", p))
+            }
+            (p, b)
+        },
+        _ => return Err(format!("Not a lambda while evaluating map: {}", lambda)),
+    };
+
+    let items = match coll {
+        Object::ListData(list) => list,
+        _ => return Err(format!("Invalid map arguments: {:?}", list)),
+    };
+
+    let first_arg = &params[0];
+    let mut result_list = Vec::new();
+    for item in items.iter() {
+        let val = eval_obj(&item, env)?;
+        let mut new_env = Rc::new(RefCell::new(Env::extend(env.clone())));
+        new_env.borrow_mut().set(&first_arg, val);
+        let new_body = body.clone();
+        let result = eval_obj(&Object::List(new_body), &mut new_env)?;
+        result_list.push(result);
+    }
+    Ok(Object::ListData(result_list))
+}
+
+fn eval_filter(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    if list.len() != 3 {
+        return Err(format!("Invalid arity for filter function. filter accepts only 2 args"));
+    }
+    let lambda = eval_obj(&list[1], env)?;
+    let coll = eval_obj(&list[2], env)?;
+    let (params, body) = match lambda {
+        Object::Lambda(p, b) => {
+            if p.len() != 1 {
+                return Err(format!("Invalid number of parameters for filter lambda function {:?}", p));
+            }
+            (p, b)
+        },
+        _ => return Err(format!("Not a lambda while evaluating filter {:?}", lambda))
+    };
+
+    let items = match coll {
+        Object::ListData(list) => list,
+        _ => return Err(format!("Invalid filter arguments. Second argument must be a list but found : {:?}", list))
+    };
+
+    let first_arg = &params[0];
+    let mut result_list = Vec::new();
+    for item in items.iter() {
+        let val = eval_obj(&item, env)?;
+        let mut new_env = Rc::new(RefCell::new(Env::extend(env.clone())));
+        new_env.borrow_mut().set(&first_arg, val.clone());
+        let new_body = body.clone();
+        match eval_obj(&Object::List(new_body), &mut new_env)? {
+            Object::Bool(b) => {
+                if b {
+                    result_list.push(val);
+                }
+            }
+            _ => continue
+        }
+    }
+    Ok(Object::ListData(result_list))
 }
 
 fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
@@ -178,10 +256,10 @@ fn eval_if(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, Str
         _ => return Err(format!("Condition must be a boolean"))
     };
 
-    if cond == true {
-        return eval_obj(&list[2], env);
+    return if cond == true {
+        eval_obj(&list[2], env)
     } else {
-        return eval_obj(&list[3], env);
+        eval_obj(&list[3], env)
     }
 }
 
@@ -212,15 +290,15 @@ fn eval_function_call(name: &str, list: &Vec<Object>, env: &mut Rc<RefCell<Env>>
         return Err(format!("Unbound symbol: {}", name));
     }
     let func = lambda.unwrap();
-    if let Object::Lambda(params, body) = func {
+    return if let Object::Lambda(params, body) = func {
         let mut new_env = Rc::new(RefCell::new(Env::extend(env.clone())));
         for (i, param) in params.iter().enumerate() {
             let val = eval_obj(&list[i + 1], env)?;
             new_env.borrow_mut().set(param, val);
         }
-        return eval_obj(&Object::List(body), &mut new_env);
+        eval_obj(&Object::List(body), &mut new_env)
     } else {
-        return Err(format!("Not a lambda: {}", name));
+        Err(format!("Not a lambda: {}", name))
     }
 }
 
@@ -263,5 +341,28 @@ mod tests {
 
         let result = eval(program, &mut env).unwrap();
         assert_eq!(result, Object::List(vec![Object::Integer((120) as i64)]));
+    }
+
+    #[test]
+    fn test_map() {
+        let mut env = Rc::new(RefCell::new(Env::new()));
+        let program = "\
+        (
+            (define sqr (lambda (r) (* r r)))
+            (define coll (list 1 2 3 4 5))
+            (map sqr coll)
+        )
+        ";
+        let result = eval(program, &mut env).unwrap();
+        assert_eq!(
+            result,
+            Object::List(vec![Object::ListData(vec![
+                Object::Integer(1),
+                Object::Integer(4),
+                Object::Integer(9),
+                Object::Integer(16),
+                Object::Integer(25),
+            ])])
+        )
     }
 }
