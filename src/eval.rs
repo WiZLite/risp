@@ -29,7 +29,7 @@ fn eval_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, S
     match head {
         Object::Symbol(s) => match s.as_str() {
             "define" => eval_define(&list, env),
-            "+" | "-" | "*" | "/" | "<" | ">" | "=" | "!=" => eval_binary_op(&list, env),
+            "+" | "-" | "*" | "/" | "<" | ">" | "=" | "!=" | "&" | "|" => eval_binary_op(&list, env),
             "if" => eval_if(&list, env),
             "lambda" => eval_function_definition(&list),
             _ => eval_function_call(s, &list, env)
