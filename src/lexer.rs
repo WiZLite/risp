@@ -1,4 +1,4 @@
-use std::{fmt::{self, format}, error::Error};
+use std::{fmt::{self}, error::Error};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
