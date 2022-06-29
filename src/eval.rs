@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -37,6 +37,7 @@ fn eval_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, S
             "map" => eval_map(&list, env),
             "filter" => eval_filter(&list, env),
             "lambda" => eval_function_definition(&list),
+            "reduce" => eval_reduce(&list, env),
             _ => eval_function_call(s, &list, env)
         },
         _ => {
@@ -154,6 +155,38 @@ fn eval_filter(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object,
         }
     }
     Ok(Object::ListData(result_list))
+}
+
+fn eval_reduce(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    if list.len() != 4 {
+        return Err(format!("Invalid arity for reduce function. reduce accepts only 3 args"));
+    }
+    let lambda = eval_obj(&list[1], env)?;
+    let coll = eval_obj(&list[3], env)?;
+    let (params, body) = match lambda {
+        Object::Lambda(p, b) => {
+            if p.len() != 2 {
+                return Err(format!("Invalid number of parameters for reduce lambda function {:?}", p));
+            }
+            (p,b)
+        },
+        _ => return Err(format!("Not a lambda whle evaluating reduce {:?}", lambda))
+    };
+    let items = match coll {
+        Object::ListData(data) => data,
+        _ => return Err(format!("Invalid reduce argumetns. Second arguments must be a list but found {:?}", coll))
+    };
+    let arg_a = &params[0];
+    let arg_b = &params[1];
+    let mut a = eval_obj(&list[2], env)?;
+    for i in 0..items.len() {
+        let b = eval_obj(&items[i], env)?;
+        let new_env = Rc::new(RefCell::new(Env::extend(env.clone())));
+        new_env.borrow_mut().set(arg_a, a);
+        new_env.borrow_mut().set(arg_b, b);
+        a = eval_list(&body, &mut new_env.clone())?;
+    }
+    Ok(a)
 }
 
 fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
@@ -363,6 +396,23 @@ mod tests {
                 Object::Integer(16),
                 Object::Integer(25),
             ])])
+        )
+    }
+
+    #[test]
+    fn test_reduce() {
+        let mut env = Rc::new(RefCell::new(Env::new()));
+        let program = "(
+            (define add (lambda (a b) (+ a b)))
+            (define coll (list 1 2 3 4 5))
+            (reduce add 0 coll)
+        )";
+        let result = eval(program, &mut env).unwrap();
+        assert_eq!(
+            result,
+            Object::List(vec![
+                Object::Integer(15)
+            ])
         )
     }
 }
