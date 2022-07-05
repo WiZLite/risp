@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc };
 
 use env::Env;
 use linefeed::{Interface, ReadResult};
@@ -27,29 +27,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if unclosed_lparen > 0 {
             continue;
         }
-        
-        let val = eval::eval(current_source.as_ref(), &mut env)?;
-        println!("val: {}", val);
-        match val {
-            Object::Void => {},
-            Object::Integer(n) => println!("{}", n),
-            Object::Bool(b) => println!("{}", b),
-            Object::Symbol(s) => println!("{}", s),
-            Object::Lambda(params, body) => {
-                println!("(lambda (");
-                for (i, param) in params.iter().enumerate() {
-                    if i == param.len() - 1 {
-                        println!("{}", param);
-                    } else {
-                        println!("{} ", param);
+
+        match eval::eval(current_source.as_ref(), &mut env) {
+            Ok(val) => match val {
+                Object::Void => {},
+                Object::Integer(n) => println!("{}", n),
+                Object::Bool(b) => println!("{}", b),
+                Object::Symbol(s) => println!("{}", s),
+                Object::Lambda(params, body) => {
+                    println!("(lambda (");
+                    for (i, param) in params.iter().enumerate() {
+                        if i == param.len() - 1 {
+                            println!("{}", param);
+                        } else {
+                            println!("{} ", param);
+                        }
                     }
-                }
-                println!(")");
-                for expr in body {
-                    println!(" {}", expr);
-                }
+                    println!(")");
+                    for expr in body {
+                        println!(" {}", expr);
+                    }
+                },
+                _ => println!("{}", val)
             }
-            _ => println!("{}", val)
+            Err(err) => {
+                println!("Execution error. {:?}", err);
+            }
         }
         current_source = String::new();
     }

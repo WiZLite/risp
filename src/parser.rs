@@ -25,8 +25,19 @@ pub fn parse(program: &str) -> Result<Object, ParseError> {
     }
 
     let mut tokens = token_result.unwrap().into_iter().rev().collect::<Vec<_>>();
-    let parsed_list = parse_list(&mut tokens)?;
-    Ok(parsed_list)
+
+    let result = match tokens.last().unwrap() {
+        Token::LParen => {
+            parse_list(&mut tokens)?
+        },
+        Token::Integer(n) => Object::Integer(*n),
+        Token::Float(f) => Object::Float(*f),
+        Token::String(s) => Object::String(s.clone()),
+        Token::Symbol(s) => Object::Symbol(s.clone()),
+        _ => todo!()
+    };
+
+    Ok(result)
 }
 
 fn parse_list(tokens: &mut Vec<Token>) -> Result<Object, ParseError> {
