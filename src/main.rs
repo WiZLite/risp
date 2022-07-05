@@ -29,30 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         match eval::eval(current_source.as_ref(), &mut env) {
-            Ok(val) => match val {
-                Object::Void => {},
-                Object::Integer(n) => println!("{}", n),
-                Object::Bool(b) => println!("{}", b),
-                Object::Symbol(s) => println!("{}", s),
-                Object::Lambda(params, body) => {
-                    println!("(lambda (");
-                    for (i, param) in params.iter().enumerate() {
-                        if i == param.len() - 1 {
-                            println!("{}", param);
-                        } else {
-                            println!("{} ", param);
-                        }
-                    }
-                    println!(")");
-                    for expr in body {
-                        println!(" {}", expr);
-                    }
-                },
-                _ => println!("{}", val)
-            }
-            Err(err) => {
-                println!("Execution error. {:?}", err);
-            }
+            Ok(val) => println!("{:?}", val),
+            Err(err) => println!("Execution error. {:?}", err)
         }
         current_source = String::new();
     }
