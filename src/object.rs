@@ -8,6 +8,9 @@ pub enum Object {
     Bool(bool),
     String(String),
     Symbol(String),
+    Keyword(String),
+    If,
+    BinaryOp(String),
     Lambda(Vec<String>, Vec<Object>),
     List(Vec<Object>),
     ListData(Vec<Object>),
@@ -22,6 +25,9 @@ impl fmt::Display for Object {
             Object::Bool(b) => write!(f, "{}", b),
             Object::String(s) => write!(f, "{}", s),
             Object::Symbol(s) => write!(f, "{}", s),
+            Object::Keyword(s) => write!(f, "{}", s),
+            Object::If => write!(f, "if"),
+            Object::BinaryOp(s) => write!(f, "{}", s),
             Object::Lambda(params, body) => {
                 write!(f, "Lambda(")?;
                 for param in params {

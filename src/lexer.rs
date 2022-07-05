@@ -5,6 +5,9 @@ pub enum Token {
     Integer(i64),
     Float(f64),
     Symbol(String),
+    Keyword(String),
+    If,
+    BinaryOp(String),
     String(String),
     LParen,
     RParen
@@ -18,6 +21,9 @@ impl fmt::Display for Token {
                 Integer(n) => format!("{}", n),
                 Float(f) => format!("{}", f),
                 Symbol(s) => format!("{}", s),
+                Keyword(s) => format!("{}", s),
+                BinaryOp(s) => format!("{}", s),
+                If => format!("if"),
                 String(s) => format!("\"{}\"", s),
                 LParen => format!("("),
                 RParen => format!(")"),
@@ -92,7 +98,17 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, TokenError> {
                     continue;
                 }
 
-                tokens.push(Token::Symbol(word.to_string()));
+                let token = match word.as_str() {
+                    "define" | "list" | "print" | "lambda" | "map" | "filter" | "reduce" => {
+                        Token::Keyword(word)
+                    },
+                    "+" | "-" | "*" | "/" | "%" | "<" | ">" | "=" | "!=" | "&" | "|" => {
+                        Token::BinaryOp(word)
+                    }
+                    "if" => Token::If,
+                    _ => Token::Symbol(word)
+                };
+                tokens.push(token)
             }
         }
     }
@@ -111,7 +127,7 @@ mod tests {
             tokens,
             vec![
                 Token::LParen,
-                Token::Symbol("+".to_string()),
+                Token::BinaryOp("+".to_string()),
                 Token::Integer(1),
                 Token::Integer(2),
                 Token::RParen,
@@ -134,20 +150,20 @@ mod tests {
             vec![
                 Token::LParen,
                 Token::LParen,
-                Token::Symbol("define".to_string()),
+                Token::Keyword("define".to_string()),
                 Token::Symbol("r".to_string()),
                 Token::Integer(10),
                 Token::RParen,
                 Token::LParen,
-                Token::Symbol("define".to_string()),
+                Token::Keyword("define".to_string()),
                 Token::Symbol("pi".to_string()),
                 Token::Integer(314),
                 Token::RParen,
                 Token::LParen,
-                Token::Symbol("*".to_string()),
+                Token::BinaryOp("*".to_string()),
                 Token::Symbol("pi".to_string()),
                 Token::LParen,
-                Token::Symbol("*".to_string()),
+                Token::BinaryOp("*".to_string()),
                 Token::Symbol("r".to_string()),
                 Token::Symbol("r".to_string()),
                 Token::RParen,

@@ -5,11 +5,88 @@ use std::rc::Rc;
 use crate::{object::Object, env::Env, parser::parse};
 
 fn eval_obj(obj: &Object, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    let mut current_obj = Box::new(obj.clone());
+    let mut current_env = env.clone();
+    loop {
+        match *current_obj {
+            Object::List(list) => {
+                let head = &list[0];
+                match head {
+                    Object::BinaryOp(_) => {
+                        return eval_binary_op(&list, &mut current_env);
+                    }
+                    Object::Keyword(_) => {
+                        return eval_keyword(&list, &mut current_env);
+                    }
+                    Object::If => {
+                        if list.len() != 4 {
+                            return Err(format!("Invalid number of arguments for if statement"));
+                        }
+                        let cond_obj = eval_obj(&list[1], &mut current_env)?;
+                        let cond = match cond_obj {
+                            Object::Bool(b) => b,
+                            _ => return Err(format!("Condition must be a boolean"))
+                        };
+                        if cond {
+                            current_obj = Box::new(list[2].clone());
+                        } else {
+                            current_obj = Box::new(list[3].clone())
+                        }
+                        continue;
+                    }
+                    Object::Symbol(s) => {
+                        let lambda = current_env.borrow_mut().get(s);
+                        if lambda.is_none() {
+                            return Err(format!("Unbound function: {}", s));
+                        }
+                        let func = lambda.unwrap();
+                        match func {
+                            Object::Lambda(params, body) => {
+                                let new_env = Rc::new(RefCell::new(Env::extend(current_env.clone())));
+                                for(i, param) in params.iter().enumerate() {
+                                    let val = eval_obj(&list[i + 1], &mut current_env)?;
+                                    new_env.borrow_mut().set(param, val);
+                                }
+                                current_obj = Box::new(Object::List(body));
+                                current_env = new_env.clone();
+                                continue;
+                            }
+                            _ => return Err(format!("Not a lambda: {}", s))
+                        }
+                    }
+                    _ => {
+                        let mut new_list = Vec::new();
+                        for obj in list {
+                            let result = eval_obj(&obj, &mut current_env)?;
+                            match result {
+                                Object::Void => {}
+                                _ => new_list.push(result)
+                            }
+                        }
+                        return Ok(Object::List(new_list));
+                    }
+                }
+            }
+            Object::Symbol(s) => {
+                return eval_symbol(&s, &mut current_env);
+            }
+            Object::Void => return Ok(Object::Void),
+            Object::Lambda(_, _) => return Ok(Object::Void),
+            Object::Bool(_) => return Ok(obj.clone()),
+            Object::Integer(n) => return Ok(Object::Integer(n)),
+            Object::Float(n) => return Ok(Object::Float(n)),
+            Object::String(s) => return Ok(Object::String(s.to_string())),
+            Object::ListData(l) => return Ok(Object::ListData(l.to_vec())),
+            _ => return Err(format!("Invalid object: {:?},", obj)),
+        }
+    }
+    /*
     match obj {
         Object::Symbol(s) => eval_symbol(s, env),
         Object::List(list) => eval_list(list, env),
         _ => Ok(obj.clone())
     }
+     */
 }
 
 fn eval_symbol(s: &str, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
@@ -23,34 +100,6 @@ fn eval_symbol(s: &str, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
         return Err(format!("Unbound symbol: {}", s));
     } else {
         Ok(val.unwrap())
-    }
-}
-
-fn eval_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
-    let head = &list[0];
-    match head {
-        Object::Symbol(s) => match s.as_str() {
-            "define" => eval_define(&list, env),
-            "+" | "-" | "*" | "/" | "<" | ">" | "=" | "!=" | "&" | "|" => eval_binary_op(&list, env),
-            "if" => eval_if(&list, env),
-            "list" => eval_list_data(&list, env),
-            "map" => eval_map(&list, env),
-            "filter" => eval_filter(&list, env),
-            "lambda" => eval_function_definition(&list),
-            "reduce" => eval_reduce(&list, env),
-            _ => eval_function_call(s, &list, env)
-        },
-        _ => {
-            let mut new_list = Vec::new();
-            for obj in list {
-                let result = eval_obj(obj, env)?;
-                match result {
-                    Object::Void => {},
-                    _ => new_list.push(result)
-                }
-            }
-            Ok(Object::List(new_list))
-        }
     }
 }
 
@@ -184,7 +233,7 @@ fn eval_reduce(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object,
         let new_env = Rc::new(RefCell::new(Env::extend(env.clone())));
         new_env.borrow_mut().set(arg_a, a);
         new_env.borrow_mut().set(arg_b, b);
-        a = eval_list(&body, &mut new_env.clone())?;
+        a = eval_obj(&Object::List(body.clone()), &mut new_env.clone())?;
     }
     Ok(a)
 }
@@ -194,7 +243,7 @@ fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Obje
     let left = &eval_obj(&list[1].clone(), env)?;
     let right = &eval_obj(&list[2].clone(), env)?;
     match operator {
-        Object::Symbol(s) => match s.as_str() {
+        Object::BinaryOp(s) => match s.as_str() {
             "+" => match (left, right) {
                 (Object::Integer(l), Object::Integer(r)) => Ok(Object::Integer(l + r)),
                 (Object::Integer(l), Object::Float(r)) => Ok(Object::Float(*l as f64 + r)),
@@ -282,20 +331,6 @@ fn eval_binary_op(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Obje
     }
 }
 
-fn eval_if(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
-    let cond_obj = eval_obj(&list[1], env)?;
-    let cond = match cond_obj {
-        Object::Bool(b) => b,
-        _ => return Err(format!("Condition must be a boolean"))
-    };
-
-    return if cond == true {
-        eval_obj(&list[2], env)
-    } else {
-        eval_obj(&list[3], env)
-    }
-}
-
 fn eval_function_definition(list: &Vec<Object>) -> Result<Object, String> {
     let params = match &list[1] {
         Object::List(list) => {
@@ -333,6 +368,38 @@ fn eval_function_call(name: &str, list: &Vec<Object>, env: &mut Rc<RefCell<Env>>
     } else {
         Err(format!("Not a lambda: {}", name))
     }
+}
+
+fn eval_keyword(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    let head = &list[0];
+    match head {
+        Object::Keyword(s) => match s.as_str() {
+            "define" =>  eval_define(&list, env),
+            "list" =>  eval_list_data(&list, env),
+            "print" =>  print_list(&list, env),
+            "lambda" =>  eval_function_definition(&list),
+            "map" =>  eval_map(&list, env),
+            "filter" => eval_filter(&list, env),
+            "reduce" => eval_reduce(&list, env),
+            _ =>  Err(format!("Invalid keyword: {}", head))
+        },
+        _ => {
+             Err(format!("Invalid keyword: {}", head))
+        }
+    }
+}
+
+fn print_list(list: &Vec<Object>, env: &mut Rc<RefCell<Env>>) -> Result<Object, String> {
+    let mut new_list = Vec::new();
+
+    for obj in list[1..].iter() {
+        new_list.push(eval_obj(obj, env)?);
+    }
+    for obj in new_list.iter() {
+        print!("{} ", obj);
+    }
+    println!("");
+    Ok(Object::Void)
 }
 
 #[cfg(test)]
@@ -412,6 +479,27 @@ mod tests {
             result,
             Object::List(vec![
                 Object::Integer(15)
+            ])
+        )
+    }
+
+    #[test]
+    fn test_sum_n() {
+        let mut env = Rc::new(RefCell::new(Env::new()));
+        let program = "(
+            (define sum-n  
+              (lambda (n a)
+                (if (= n 0) 
+                  a
+                  (sum-n (- n 1) (+ n a))
+                )))
+            (sum-n 100 0)
+        )";
+        let result = eval(program, &mut env).unwrap();
+        assert_eq!(
+            result,
+            Object::List(vec![
+                Object::Integer(5050)
             ])
         )
     }

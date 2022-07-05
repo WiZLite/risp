@@ -34,6 +34,7 @@ pub fn parse(program: &str) -> Result<Object, ParseError> {
         Token::Float(f) => Object::Float(*f),
         Token::String(s) => Object::String(s.clone()),
         Token::Symbol(s) => Object::Symbol(s.clone()),
+        Token::Keyword(s) => Object::Keyword(s.clone()),
         _ => todo!()
     };
 
@@ -62,6 +63,9 @@ fn parse_list(tokens: &mut Vec<Token>) -> Result<Object, ParseError> {
             Token::Float(n) => list.push(Object::Float(n)),
             Token::String(s) => list.push(Object::String(s)),
             Token::Symbol(s) => list.push(Object::Symbol(s)),
+            Token::Keyword(s) => list.push(Object::Keyword(s)),
+            Token::If => list.push(Object::If),
+            Token::BinaryOp(b) => list.push(Object::BinaryOp(b)),
             Token::LParen => {
                 tokens.push(Token::LParen);
                 let sub_list = parse_list(tokens)?;
@@ -87,7 +91,7 @@ mod tests {
         assert_eq!(
             list,
             Object::List(vec![
-                Object::Symbol("+".to_string()),
+                Object::BinaryOp("+".to_string()),
                 Object::Integer(1),
                 Object::Integer(2),
             ])
@@ -106,20 +110,20 @@ mod tests {
             list,
             Object::List(vec![
                 Object::List(vec![
-                    Object::Symbol("define".to_string()),
+                    Object::Keyword("define".to_string()),
                     Object::Symbol("r".to_string()),
                     Object::Integer(10),
                 ]),
                 Object::List(vec![
-                    Object::Symbol("define".to_string()),
+                    Object::Keyword("define".to_string()),
                     Object::Symbol("pi".to_string()),
                     Object::Integer(314),
                 ]),
                 Object::List(vec![
-                    Object::Symbol("*".to_string()),
+                    Object::BinaryOp("*".to_string()),
                     Object::Symbol("pi".to_string()),
                     Object::List(vec![
-                        Object::Symbol("*".to_string()),
+                        Object::BinaryOp("*".to_string()),
                         Object::Symbol("r".to_string()),
                         Object::Symbol("r".to_string()),
                     ]),
